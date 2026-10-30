@@ -1,0 +1,88 @@
+#!/bin/sh
+# funes's PiG integration: register this directory with PiG as a Package, and bind the memory it
+# recalls from and publishes to.
+#
+# The extension under extensions/funes is a Go one: PiG builds it, it spawns `funes mcp` over stdio
+# and registers whatever tools/list returns, and it converts each finished turn into the spool funes
+# indexes. There is no converter to run from here: the extension converts PiG's history itself the
+# first time it starts.
+set -eu
+
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+usage() {
+    echo "usage: setup add [MEMORY] | setup remove" >&2
+    exit 2
+}
+
+have_pig() {
+    command -v pig >/dev/null 2>&1
+}
+
+# The directory funes drains for this agent. funes hands us its home and our id; the extension sees
+# neither, so the resolved path is written beside it.
+spool_dir() {
+    printf '%s/spool/%s\n' "${FUNES_HOME:-$HOME/.funes}" "${FUNES_AGENT_ID:-pig}"
+}
+
+add() {
+    # The memory the extension reads at startup; absent is the local memory.
+    if [ -n "${1:-}" ]; then
+        printf '%s\n' "$1" >"$HERE/memory"
+    else
+        rm -f "$HERE/memory"
+    fi
+
+    spool=$(spool_dir)
+    mkdir -p "$spool"
+    printf '%s\n' "$spool" >"$HERE/spool"
+
+    if ! have_pig; then
+        echo "the funes PiG extension is installed at $HERE"
+        echo "\`pig\` isn't on PATH — once it is, run:  pig install $HERE"
+        return 0
+    fi
+
+    pig install "$HERE"
+    echo "installed funes into PiG — recall and per-turn indexing are active from the next pig start," \
+        "which also converts your existing sessions."
+}
+
+remove() {
+    # The spool holds converted copies of PiG's own sessions, so dropping it loses nothing a re-add
+    # cannot rebuild — and leaving it would have funes keep indexing an agent it no longer serves.
+    rm -rf "$(spool_dir)"
+    rm -f "$HERE/memory" "$HERE/spool" "$HERE/swept"
+
+    if ! have_pig; then
+        echo "\`pig\` isn't on PATH — the extension and its automation were removed. Once it is," \
+            "remove the registration manually:  pig remove $HERE"
+        return 0
+    fi
+
+    # A registration PiG has already forgotten is a success.
+    if ! out=$(pig remove "$HERE" 2>&1); then
+        case "$out" in
+        *"No matching package found for"*) : ;;
+        *)
+            printf '%s\n' "$out" >&2
+            exit 1
+            ;;
+        esac
+    fi
+    echo "removed funes from PiG — package registration, its automation, and the extracted files."
+}
+
+case "${1:-}" in
+add)
+    shift
+    [ $# -le 1 ] || usage
+    add "${1:-}"
+    ;;
+remove)
+    shift
+    [ $# -eq 0 ] || usage
+    remove
+    ;;
+*) usage ;;
+esac

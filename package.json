@@ -1,0 +1,22 @@
+{
+  "name": "funes-pig",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PiG extension in Go: funes recall tools bridged to `funes mcp`, and per-turn indexing of PiG sessions into that memory",
+  "keywords": [
+    "pig-package",
+    "funes",
+    "memory",
+    "extension"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/balcsida/funes-pig.git"
+  },
+  "pi": {
+    "extensions": [
+      "extensions/funes"
+    ]
+  }
+}

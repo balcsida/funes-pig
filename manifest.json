@@ -1,0 +1,7 @@
+{
+  "contract_version": 1,
+  "id": "pig",
+  "label": "PiG",
+  "repo": "balcsida/funes-pig",
+  "version": "0.1.0"
+}
