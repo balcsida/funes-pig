@@ -51,8 +51,12 @@ untouched.
 
 - `FUNES_BIN`: the funes binary (default `funes` from `PATH`).
 - `FUNES_MEMORY`: the memory to recall from and publish to, overriding the one bound at install.
-- `FUNES_HOME`: funes's home (default `~/.funes`); the extension finds its install under
-  `$FUNES_HOME/agents/pig`.
+- `FUNES_HOME`: funes's home (default `~/.funes`). A PiG started under another one than
+  `funes add pig` ran under indexes into that home's memory and recalls from it, and publishes only
+  to `FUNES_MEMORY`, so one host can keep two memories apart: give each PiG profile its own
+  `FUNES_HOME`. Each home needs its own sessions root too (a profile has one), since the sweep
+  converts every session under the root it runs in. The install itself is always at
+  `~/.funes/agents/pig`.
 - `PIG_CODING_AGENT_SESSION_DIR` / `PIG_CODING_AGENT_DIR`: where PiG keeps sessions, honored the
   way PiG honors them.
 
