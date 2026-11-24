@@ -6,7 +6,8 @@
 //
 // `funes` is taken from PATH; FUNES_BIN overrides it. The memory recalled from (and published to) is
 // FUNES_MEMORY, else the one `funes add pig <memory>` bound in a `memory` file in the bundle, else
-// the local memory.
+// the local memory. A PiG started under another FUNES_HOME than the one `funes add pig` ran under
+// serves that home: its spool, its memory, and no memory to publish to but FUNES_MEMORY.
 package funes
 
 import (
@@ -21,16 +22,22 @@ import (
 	sdk "github.com/MichaelKinsy/PiG/extensions/sdk"
 )
 
-// bundleDir is where `funes add pig` installed this bundle, and keeps its state: funes's contract
-// fixes it at `$FUNES_HOME/agents/<id>`. A compiled extension cannot find its own source the way a
-// script can, and a run from a checkout simply finds no state there and automates nothing.
-func bundleDir() string {
-	home := os.Getenv("FUNES_HOME")
-	if home == "" {
-		userHome, _ := os.UserHomeDir()
-		home = filepath.Join(userHome, ".funes")
+// funesHome is funes's home as funes resolves it: `$FUNES_HOME`, else `~/.funes`.
+func funesHome() string {
+	if home := os.Getenv("FUNES_HOME"); home != "" {
+		return home
 	}
-	return filepath.Join(home, "agents", "pig")
+	userHome, _ := os.UserHomeDir()
+	return filepath.Join(userHome, ".funes")
+}
+
+// bundleDir is where `funes add pig` installed this bundle, and keeps its state: funes fixes it at
+// `~/.funes/agents/<id>`, whatever `$FUNES_HOME` says. A compiled extension cannot find its own
+// source the way a script can, and a run from a checkout simply finds no state there and automates
+// nothing.
+func bundleDir() string {
+	userHome, _ := os.UserHomeDir()
+	return filepath.Join(userHome, ".funes", "agents", "pig")
 }
 
 // bound is a file `setup add` wrote into the bundle, or "" when there is none.
@@ -72,6 +79,29 @@ type automation struct {
 	memory string
 }
 
+// newAutomation is the automation of the bundle at dir, for the funes home PiG was started under.
+// The spool it fills is the one the `funes` it runs drains, in that home. The memory `setup add`
+// recorded is the binding of the home it ran under, whose spool it recorded too: under another home
+// only FUNES_MEMORY names one. That keeps two memories on one host apart only with a PiG sessions
+// root per home: the sweep converts what the root holds, whichever home each session ran under.
+// shortcut: the sweep's mark is shared by every home, so even with a root per home a session a dead
+// PiG never converted can be missed while two homes run side by side; give each home its own mark
+// if that bites.
+func newAutomation(dir string) automation {
+	recorded := bound(dir, "spool")
+	a := automation{dir: dir, spool: recorded, memory: bound(dir, "memory")}
+	if recorded != "" {
+		a.spool = filepath.Join(funesHome(), "spool", "pig")
+		if a.spool != filepath.Clean(recorded) {
+			a.memory = ""
+		}
+	}
+	if m := strings.TrimSpace(os.Getenv("FUNES_MEMORY")); m != "" {
+		a.memory = m
+	}
+	return a
+}
+
 // run starts funes-index.sh detached and forgets it, as the pi bundle does: no failure of its is
 // worth disturbing the session with, and its own log says what happened.
 func (a automation) run(args ...string) {
@@ -82,6 +112,8 @@ func (a automation) run(args ...string) {
 	if _, err := os.Stat(script); err != nil {
 		return
 	}
+	// `setup add` made the spool of its own home; funes drains only one that exists.
+	_ = os.MkdirAll(a.spool, 0o755)
 	cmd := exec.Command("sh", append([]string{script}, args...)...)
 	cmd.Env = funesEnv()
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -141,10 +173,7 @@ func sessionFile(ctx sdk.Context) string {
 func Extension() *sdk.Extension {
 	ext := sdk.New("funes")
 	dir := bundleDir()
-	auto := automation{dir: dir, spool: bound(dir, "spool"), memory: bound(dir, "memory")}
-	if m := strings.TrimSpace(os.Getenv("FUNES_MEMORY")); m != "" {
-		auto.memory = m
-	}
+	auto := newAutomation(dir)
 
 	bin := os.Getenv("FUNES_BIN")
 	if bin == "" {

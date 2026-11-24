@@ -170,3 +170,36 @@ func TestMCPStartFailure(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// The bundle is where funes installs it, whatever home PiG runs under; the spool and the memory
+// are those of the home PiG runs under.
+func TestAutomationServesTheHomePiGRunsUnder(t *testing.T) {
+	userHome, installed, other := t.TempDir(), t.TempDir(), t.TempDir()
+	t.Setenv("HOME", userHome)
+	t.Setenv("FUNES_MEMORY", "")
+	dir := t.TempDir()
+	recorded := filepath.Join(installed, "spool", "pig")
+	for name, value := range map[string]string{"spool": recorded, "memory": "acme/kb"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(value+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Setenv("FUNES_HOME", installed)
+	if got, want := bundleDir(), filepath.Join(userHome, ".funes", "agents", "pig"); got != want {
+		t.Fatalf("bundle under a FUNES_HOME: got %s, want %s", got, want)
+	}
+	if a := newAutomation(dir); a.spool != recorded || a.memory != "acme/kb" {
+		t.Fatalf("under the installed home: got %+v", a)
+	}
+
+	t.Setenv("FUNES_HOME", other)
+	a := newAutomation(dir)
+	if want := filepath.Join(other, "spool", "pig"); a.spool != want || a.memory != "" {
+		t.Fatalf("under another home: got %+v, want spool %s and no memory", a, want)
+	}
+	t.Setenv("FUNES_MEMORY", "acme/other")
+	if a := newAutomation(dir); a.memory != "acme/other" {
+		t.Fatalf("FUNES_MEMORY under another home: got %q", a.memory)
+	}
+}

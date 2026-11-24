@@ -5,8 +5,10 @@
 #
 #   funes-index.sh                     per turn: index
 #   funes-index.sh --publish [MEMORY]  at a boundary: index, waiting out a per-turn run that still
-#                                      holds the memory lock, then push to MEMORY — or to the memory
-#                                      `setup add` recorded beside this script
+#                                      holds the memory lock, then push to MEMORY
+#
+# MEMORY is the extension's to resolve, for the funes home PiG runs under: with none, nothing is
+# pushed.
 #
 # No locking: `funes` serializes local-memory writes itself. A per-turn run that loses the lock
 # exits non-zero, is logged, and the next turn re-sweeps the same content — indexing is idempotent.
@@ -44,7 +46,6 @@ index() {
 # clears it once, interactively.
 publish() {
     memory=${1:-}
-    [ -n "$memory" ] || memory=$(head -n 1 "$HERE/memory" 2>/dev/null | tr -d '[:space:]')
     for attempt in 1 2 3 4 5; do
         if "$funes" index --harness "$HARNESS" >>"$LOG" 2>&1; then
             log "index[$HARNESS]: ok (before push)"
